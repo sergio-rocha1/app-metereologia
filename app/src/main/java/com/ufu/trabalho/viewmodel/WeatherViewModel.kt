@@ -66,5 +66,24 @@ class WeatherViewModel : ViewModel() {
         }
     }
 
+    fun searchAndRefresh(query: String) {
+        viewModelScope.launch {
+            try {
+                // Usa o método de pesquisa para obter o resultado
+                val result = repository.searchLocation(query)
+                if (result != null) {
+                    // Converte as strings de lat e lon para Double e atualiza os dados do clima
+                    refreshWeatherData(result.lat.toDouble(), result.lon.toDouble())
+                } else {
+                    // Se nenhum resultado, você pode atualizar o estado com um erro
+                    _currentWeatherState.value = CurrentWeatherUiState.Error("Local não encontrado")
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _currentWeatherState.value = CurrentWeatherUiState.Error("Erro na pesquisa: ${e.message}")
+            }
+        }
+    }
+
 }
 

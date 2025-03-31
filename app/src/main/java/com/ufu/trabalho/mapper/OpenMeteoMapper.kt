@@ -6,7 +6,9 @@ import com.ufu.trabalho.model.HourlyModel
 import com.ufu.trabalho.model.OpenMeteoResponse
 import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 object OpenMeteoMapper {
 
@@ -41,13 +43,27 @@ object OpenMeteoMapper {
     }
 
     fun toHourlyList(api: OpenMeteoResponse): List<HourlyModel> {
-        // Verifica se os dados horários existem
         val hourly = api.hourly ?: return emptyList()
-        // Define o número máximo de horas que deseja exibir
-        val count = minOf(10, hourly.time.size)
-        return (0 until count).map { i ->
+        // Configura o parser para o formato ISO e define o fuso horário
+        val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
+        parser.timeZone = TimeZone.getTimeZone("America/Sao_Paulo")
+        // Obtenha o horário atual
+        val now = Date()
+        // Filtra os índices cujos horários são futuros
+        val futureIndices = hourly.time.indices.filter { i ->
+            try {
+                val forecastTime = parser.parse(hourly.time[i])
+                forecastTime != null && forecastTime.after(now)
+            } catch (e: Exception) {
+                false
+            }
+        }
+
+        // Limite a 10 itens, se houver mais
+        val count = minOf(10, futureIndices.size)
+        return futureIndices.take(count).map { i ->
             HourlyModel(
-                // Se o formato for ISO (ex.: "2025-03-30T09:00"), extrai a parte de hora
+                // Extrai somente a parte da hora (HH:mm) se o formato for ISO
                 hour = if (hourly.time[i].length >= 16) hourly.time[i].substring(11, 16) else hourly.time[i],
                 temp = hourly.temperature[i].toInt(),
                 picPath = codeToPicPath(hourly.weathercode[i])

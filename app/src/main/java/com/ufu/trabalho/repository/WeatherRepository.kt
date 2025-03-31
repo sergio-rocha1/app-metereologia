@@ -1,6 +1,7 @@
 package com.ufu.trabalho.repository
 
 import com.google.gson.Gson
+import com.ufu.trabalho.model.LocationResult
 import com.ufu.trabalho.model.OpenMeteoResponse
 import com.ufu.trabalho.model.ReverseGeocodeResponse
 import io.ktor.client.*
@@ -31,7 +32,7 @@ class WeatherRepository {
                 parameters.append("current_weather", "true")
                 parameters.append("hourly", "temperature_2m,weathercode") // adiciona dados horários reais
                 parameters.append("forecast_days", "7") // Adicionado para garantir 7 dias de previsão
-                parameters.append("timezone", "auto")
+                parameters.append("timezone", "America/Sao_Paulo")
             }
         }
         val jsonString = response.bodyAsText()
@@ -55,5 +56,23 @@ class WeatherRepository {
             ?: geocodeResponse.address?.town
             ?: geocodeResponse.address?.village
             ?: "Local desconhecido"
+    }
+
+    // Função para buscar localização pela query (cidade, estado, país)
+    suspend fun searchLocation(query: String): LocationResult? {
+        val client = HttpClient() // ou reutilize seu client se preferir
+        val url = "https://nominatim.openstreetmap.org/search"
+        val response: HttpResponse = client.get(url) {
+            url {
+                parameters.append("q", query)
+                parameters.append("format", "json")
+            }
+            // Nominatim exige um User-Agent
+            header("User-Agent", "AppDeMeteorologia/1.0 (seuemail@dominio.com)")
+        }
+        val jsonString = response.bodyAsText()
+        // A resposta é uma lista de resultados, pegamos o primeiro, se houver
+        val results = Gson().fromJson(jsonString, Array<LocationResult>::class.java)
+        return results.firstOrNull()
     }
 }

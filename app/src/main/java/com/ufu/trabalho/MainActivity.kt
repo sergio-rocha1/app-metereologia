@@ -1,17 +1,5 @@
 package com.ufu.trabalho
 
-/**
- * Modificações de alinhamento e padronização de UI
- * Realizadas por: Cascade - Assistente de IA Codeium
- * Data: 30/03/2025
- * 
- * Melhorias implementadas:
- * - Padronização de dimensões com constantes
- * - Alinhamento consistente de textos e elementos
- * - Espaçamento uniforme entre componentes
- * - Aprimoramento da acessibilidade com descrições de conteúdo
- * - Distribuição equilibrada de elementos na interface
- */
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -40,10 +28,17 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -69,10 +64,11 @@ import com.ufu.trabalho.viewmodel.WeatherViewModel
 import com.uilover.trabalho.ui.components.ErrorMessage
 import com.uilover.trabalho.ui.components.LoadingIndicator
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 
-// MODIFICAÇÃO: Adicionadas constantes para padronização de dimensões em toda a UI
-// Isso garante consistência visual e facilita futuras alterações
+// Constantes de layout
 private val STANDARD_PADDING = 16.dp
 private val STANDARD_PADDING_SMALL = 8.dp
 private val STANDARD_PADDING_LARGE = 24.dp
@@ -92,7 +88,6 @@ class MainActivity : ComponentActivity() {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         setContent {
-            // Passa o viewModel e a função onRefresh para o composable
             WeatherScreen(
                 viewModel = weatherViewModel,
                 onRefresh = { getLocationAndRefreshWeather() }
@@ -121,17 +116,14 @@ class MainActivity : ComponentActivity() {
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
                 getLocationAndRefreshWeather()
-            } else {
-                // Trate o caso de permissão negada se necessário
             }
         }
 
     private fun getLocationAndRefreshWeather() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED
-        ) {
-            return
-        }
+        ) return
+
         fusedLocationClient.lastLocation.addOnSuccessListener { location ->
             location?.let {
                 weatherViewModel.refreshWeatherData(it.latitude, it.longitude)
@@ -146,7 +138,7 @@ fun WeatherScreen(
     viewModel: WeatherViewModel = viewModel(),
     onRefresh: () -> Unit = {}
 ) {
-    // Coleta os três estados do ViewModel
+    // Coleta estados do ViewModel
     val currentState by viewModel.currentWeatherState.collectAsState()
     val hourlyState by viewModel.hourlyForecastState.collectAsState()
     val dailyState by viewModel.dailyForecastState.collectAsState()
@@ -156,44 +148,38 @@ fun WeatherScreen(
             .fillMaxSize()
             .background(
                 brush = Brush.horizontalGradient(
-                    colors = listOf(
-                        Color(0xFF59469D),
-                        Color(0xFF643D67)
-                    )
+                    colors = listOf(Color(0xFF59469D), Color(0xFF643D67))
                 )
             )
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            // Removemos o padding horizontal e deixamos só um padding vertical pequeno
             contentPadding = PaddingValues(vertical = STANDARD_PADDING_SMALL),
             verticalArrangement = Arrangement.spacedBy(STANDARD_PADDING_SMALL)
         ) {
-            // Seção do clima atual
+            // Barra de pesquisa
+            item {
+                SearchBar(onSearch = { query -> viewModel.searchAndRefresh(query) })
+            }
+            // Clima atual
             item {
                 when (currentState) {
-                    is CurrentWeatherUiState.Loading -> {
-                        LoadingIndicator(modifier = Modifier.padding(top = 100.dp))
-                    }
+                    is CurrentWeatherUiState.Loading -> LoadingIndicator(modifier = Modifier.padding(top = 100.dp))
                     is CurrentWeatherUiState.Success -> {
                         val current = (currentState as CurrentWeatherUiState.Success).data
-
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 48.dp) // espaço superior
+                                .padding(top = STANDARD_PADDING_LARGE)
                                 .padding(horizontal = STANDARD_PADDING_LARGE),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            // Nome da cidade
                             Text(
                                 text = current.locationName.uppercase(),
                                 fontSize = 20.sp,
                                 color = Color.White,
                                 textAlign = TextAlign.Center
                             )
-
-                            // Condição do clima
                             Text(
                                 text = current.condition,
                                 fontSize = 20.sp,
@@ -201,11 +187,9 @@ fun WeatherScreen(
                                 modifier = Modifier.padding(top = STANDARD_PADDING_SMALL),
                                 textAlign = TextAlign.Center
                             )
-
-                            // Ícone grande
                             Image(
                                 painter = painterResource(
-                                    id = getDrawableResourceIdFromCondition(current.condition)
+                                    id = getDrawableResourceIdForTime(current.condition, current.dateTime)
                                 ),
                                 contentDescription = "Ícone do clima",
                                 modifier = Modifier
@@ -213,8 +197,6 @@ fun WeatherScreen(
                                     .padding(top = STANDARD_PADDING_SMALL),
                                 contentScale = ContentScale.Fit
                             )
-
-                            // Temperatura atual
                             Text(
                                 text = "${current.temperature}°",
                                 fontSize = 63.sp,
@@ -223,8 +205,6 @@ fun WeatherScreen(
                                 modifier = Modifier.padding(top = STANDARD_PADDING_SMALL),
                                 textAlign = TextAlign.Center
                             )
-
-                            // Data/hora formatada
                             Text(
                                 text = formatDateTime(current.dateTime),
                                 fontSize = 19.sp,
@@ -232,8 +212,6 @@ fun WeatherScreen(
                                 modifier = Modifier.padding(top = STANDARD_PADDING_SMALL),
                                 textAlign = TextAlign.Center
                             )
-
-                            // Altas e baixas
                             Text(
                                 text = "H:${current.highTemp} L:${current.lowTemp}",
                                 fontSize = 16.sp,
@@ -249,13 +227,10 @@ fun WeatherScreen(
                     }
                 }
             }
-
-            // Seção da previsão horária
+            // Previsão horária
             item {
                 when (hourlyState) {
-                    is HourlyForecastUiState.Loading -> {
-                        LoadingIndicator(modifier = Modifier.height(150.dp).fillMaxWidth())
-                    }
+                    is HourlyForecastUiState.Loading -> LoadingIndicator(modifier = Modifier.height(150.dp).fillMaxWidth())
                     is HourlyForecastUiState.Success -> {
                         val hourlyItems = (hourlyState as HourlyForecastUiState.Success).data
                         LazyRow(
@@ -270,20 +245,14 @@ fun WeatherScreen(
                     }
                     is HourlyForecastUiState.Error -> {
                         val errorMessage = (hourlyState as HourlyForecastUiState.Error).message
-                        ErrorMessage(
-                            message = errorMessage,
-                            modifier = Modifier.height(150.dp).fillMaxWidth()
-                        )
+                        ErrorMessage(message = errorMessage, modifier = Modifier.height(150.dp).fillMaxWidth())
                     }
                 }
             }
-
-            // Seção da previsão diária (usando Column para evitar altura infinita)
+            // Previsão diária
             item {
                 when (dailyState) {
-                    is DailyForecastUiState.Loading -> {
-                        LoadingIndicator(modifier = Modifier.height(300.dp).fillMaxWidth())
-                    }
+                    is DailyForecastUiState.Loading -> LoadingIndicator(modifier = Modifier.height(300.dp).fillMaxWidth())
                     is DailyForecastUiState.Success -> {
                         val dailyItems = (dailyState as DailyForecastUiState.Success).data
                         Column(
@@ -306,12 +275,9 @@ fun WeatherScreen(
                                         day = item.day,
                                         tempMax = item.highTemp.toDouble(),
                                         tempMin = item.lowTemp.toDouble(),
-                                        iconRes = when (item.picPath) {
-                                            "sunny" -> R.drawable.sunny
-                                            "cloudy_sunny" -> R.drawable.cloudy_sunny
-                                            "storm" -> R.drawable.storm
-                                            else -> R.drawable.cloudy
-                                        }
+                                        // Aqui usamos nossa nova função para previsão diária,
+                                        // que verifica se o dia atual é noturno (baseado em data ou outro critério)
+                                        iconRes = getDrawableResourceIdForTime(item.status, item.day)
                                     )
                                 }
                             }
@@ -319,15 +285,11 @@ fun WeatherScreen(
                     }
                     is DailyForecastUiState.Error -> {
                         val errorMessage = (dailyState as DailyForecastUiState.Error).message
-                        ErrorMessage(
-                            message = errorMessage,
-                            modifier = Modifier.height(300.dp).fillMaxWidth()
-                        )
+                        ErrorMessage(message = errorMessage, modifier = Modifier.height(300.dp).fillMaxWidth())
                     }
                 }
             }
-
-            // Botão de Atualizar centralizado e com largura máxima limitada
+            // Botão de atualizar centralizado
             item {
                 Box(
                     modifier = Modifier.fillMaxWidth(),
@@ -339,7 +301,7 @@ fun WeatherScreen(
                             containerColor = colorResource(id = R.color.purple)
                         ),
                         shape = RoundedCornerShape(CORNER_RADIUS / 2),
-                        modifier = Modifier.widthIn(max = 250.dp) // Limita a largura máxima
+                        modifier = Modifier.widthIn(max = 250.dp)
                     ) {
                         Text(text = "Atualizar", color = Color.White)
                     }
@@ -384,14 +346,15 @@ fun DailyForecastItem(day: String, tempMax: Double, tempMin: Double, iconRes: In
 
 @Composable
 fun FutureModelViewHolder(model: HourlyModel) {
-    // Layout para exibir previsão horária
     Column(
         modifier = Modifier.padding(STANDARD_PADDING),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(text = model.hour, color = Color.White, fontSize = 16.sp)
+        // Aqui usamos a função para previsão horária, que verifica se o horário é noturno
+        val iconId = getHourlyDrawableResourceId(model.picPath, model.hour)
         Image(
-            painter = painterResource(id = getDrawableResourceId(model.picPath)),
+            painter = painterResource(id = iconId),
             contentDescription = "Ícone para ${model.hour}",
             modifier = Modifier.size(ICON_SIZE_MEDIUM)
         )
@@ -399,7 +362,111 @@ fun FutureModelViewHolder(model: HourlyModel) {
     }
 }
 
-// Função auxiliar para mapear o nome do ícone para um recurso drawable
+@Composable
+fun SearchBar(onSearch: (String) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    OutlinedTextField(
+        value = query,
+        onValueChange = { query = it },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        placeholder = {
+            Text(
+                text = "Pesquisar cidade, estado ou país",
+                color = Color.LightGray
+            )
+        },
+        singleLine = true,
+        textStyle = LocalTextStyle.current.copy(color = Color.White),
+        trailingIcon = {
+            IconButton(onClick = { onSearch(query) }) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_search),
+                    contentDescription = "Buscar",
+                    tint = Color.White
+                )
+            }
+        }
+    )
+}
+
+// FUNÇÕES AUXILIARES
+
+// Obtém o ícone diurno com base na chave de condição
+fun getDayIcon(condition: String): Int {
+    return when {
+        condition.contains("ensolarado", ignoreCase = true) || condition.contains("céu limpo", ignoreCase = true) -> R.drawable.sunny
+        condition.contains("nublado", ignoreCase = true) -> R.drawable.cloudy_sunny
+        condition.contains("chuva", ignoreCase = true) -> R.drawable.storm
+        else -> R.drawable.cloudy
+    }
+}
+
+// Recebe se é noite e retorna o ícone final (para dia e noite)
+fun getIconForCondition(condition: String, isNight: Boolean): Int {
+    val dayIcon = getDayIcon(condition)
+    return if (!isNight) {
+        dayIcon
+    } else {
+        when (dayIcon) {
+            R.drawable.sunny -> R.drawable.moon         // Para céu limpo à noite
+            R.drawable.cloudy_sunny -> R.drawable.moon_cloudy  // Para nuvens à noite
+            R.drawable.storm -> R.drawable.rain          // Para chuva à noite (pode ser ícone de chuva noturna)
+            else -> R.drawable.moon
+        }
+    }
+}
+
+// Verifica se um horário ISO "yyyy-MM-dd'T'HH:mm" é noturno
+fun isNight(dateTime: String): Boolean {
+    return try {
+        val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault()).apply {
+            timeZone = TimeZone.getTimeZone("America/Sao_Paulo")
+        }
+        val date = parser.parse(dateTime)
+        val calendar = Calendar.getInstance().apply { time = date }
+        val hour = calendar.get(Calendar.HOUR_OF_DAY)
+        hour >= 18 || hour < 6
+    } catch (e: Exception) {
+        false
+    }
+}
+
+// Para previsão horária: verifica se o campo "hour" (formato "HH:mm") é noturno
+fun isNightHour(hour: String): Boolean {
+    return try {
+        val hourInt = hour.substring(0, 2).toInt()
+        hourInt >= 18 || hourInt < 6
+    } catch (e: Exception) {
+        false
+    }
+}
+
+// Para o clima atual e diária: usa a data/hora completa para definir se é noite
+fun getDrawableResourceIdForTime(condition: String, dateTime: String): Int {
+    val night = isNight(dateTime)
+    return getIconForCondition(condition, night)
+}
+
+// Para previsão horária: usa a hora (formato "HH:mm") para definir se é noite
+fun getHourlyDrawableResourceId(picPath: String, hour: String): Int {
+    val dayIcon = getDrawableResourceId(picPath)
+    val night = isNightHour(hour)
+    return if (!night) {
+        dayIcon
+    } else {
+        // Mapeia o ícone diurno para sua versão noturna
+        when (dayIcon) {
+            R.drawable.sunny -> R.drawable.moon
+            R.drawable.cloudy_sunny -> R.drawable.moon_cloudy
+            R.drawable.storm -> R.drawable.rain
+            else -> R.drawable.moon
+        }
+    }
+}
+
+// Mapeia a chave para um drawable diurno simples
 fun getDrawableResourceId(picPath: String): Int {
     return when (picPath) {
         "sunny" -> R.drawable.sunny
@@ -409,28 +476,14 @@ fun getDrawableResourceId(picPath: String): Int {
     }
 }
 
-/**
- * Função auxiliar que retorna um ícone de acordo com a condição textual.
- * Ajuste conforme a lógica que preferir.
- */
-fun getDrawableResourceIdFromCondition(condition: String): Int {
-    return when {
-        condition.contains("ensolarado", ignoreCase = true) -> R.drawable.sunny
-        condition.contains("nublado", ignoreCase = true) -> R.drawable.cloudy_sunny
-        condition.contains("chuva", ignoreCase = true) -> R.drawable.storm
-        else -> R.drawable.cloudy
-    }
-}
-
+// Formata a data/hora do ISO para "EEE MMM dd | HH:mm"
 fun formatDateTime(isoString: String): String {
     return try {
-        // Parser para o formato ISO recebido
         val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
         val date = parser.parse(isoString)
-        // Formatter para o formato desejado. "EEE" fornece o dia da semana abreviado
         val formatter = SimpleDateFormat("EEE MMM dd | HH:mm", Locale("pt", "BR"))
         formatter.format(date)
     } catch (e: Exception) {
-        isoString // fallback caso ocorra erro
+        isoString
     }
 }
