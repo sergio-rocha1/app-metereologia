@@ -69,7 +69,9 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
 
-// Constantes de layout
+/**
+ * Constantes de layout utilizadas em toda a aplicação
+ */
 private val STANDARD_PADDING = 16.dp
 private val STANDARD_PADDING_SMALL = 8.dp
 private val STANDARD_PADDING_LARGE = 24.dp
@@ -78,11 +80,22 @@ private val ICON_SIZE_MEDIUM = 40.dp
 private val ICON_SIZE_LARGE = 150.dp
 private val CORNER_RADIUS = 25.dp
 
+/**
+ * Atividade principal do aplicativo de meteorologia.
+ * 
+ * Responsável por gerenciar a interface do usuário principal, solicitar permissões de localização
+ * e coordenar a obtenção de dados meteorológicos com base na localização do usuário.
+ */
 class MainActivity : ComponentActivity() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private val weatherViewModel: WeatherViewModel by viewModels()
 
+    /**
+     * Inicializa a atividade, configura a interface do usuário e solicita permissões necessárias.
+     *
+     * @param savedInstanceState Estado salvo da atividade, caso tenha sido restaurada
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -103,6 +116,11 @@ class MainActivity : ComponentActivity() {
         requestLocationPermission()
     }
 
+    /**
+     * Solicita permissão de localização ao usuário.
+     * 
+     * Verifica se a permissão já foi concedida e, caso contrário, inicia o fluxo de solicitação.
+     */
     private fun requestLocationPermission() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED
@@ -113,6 +131,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Launcher para processar o resultado da solicitação de permissão de localização.
+     * 
+     * Se a permissão for concedida, obtém a localização atual e atualiza os dados meteorológicos.
+     */
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
@@ -120,6 +143,11 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    /**
+     * Obtém a localização atual do usuário e atualiza os dados meteorológicos.
+     * 
+     * Esta função requer que a permissão de localização já tenha sido concedida.
+     */
     private fun getLocationAndRefreshWeather() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED
@@ -133,6 +161,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Composable principal que exibe a tela de previsão do tempo.
+ *
+ * @param viewModel ViewModel que gerencia os dados meteorológicos
+ * @param onRefresh Callback para atualizar os dados meteorológicos
+ */
 @Preview
 @Composable
 fun WeatherScreen(
@@ -313,6 +347,14 @@ fun WeatherScreen(
     }
 }
 
+/**
+ * Composable que exibe um item de previsão diária.
+ *
+ * @param day Dia da semana
+ * @param tempMax Temperatura máxima do dia
+ * @param tempMin Temperatura mínima do dia
+ * @param iconRes ID do recurso de ícone para a condição meteorológica
+ */
 @Composable
 fun DailyForecastItem(day: String, tempMax: Double, tempMin: Double, iconRes: Int) {
     Row(
@@ -346,6 +388,11 @@ fun DailyForecastItem(day: String, tempMax: Double, tempMin: Double, iconRes: In
     }
 }
 
+/**
+ * Composable que exibe um modelo de previsão horária.
+ *
+ * @param model Modelo de dados contendo informações meteorológicas horárias
+ */
 @Composable
 fun FutureModelViewHolder(model: HourlyModel) {
     Column(
@@ -364,6 +411,11 @@ fun FutureModelViewHolder(model: HourlyModel) {
     }
 }
 
+/**
+ * Composable que implementa uma barra de pesquisa para buscar localizações.
+ *
+ * @param onSearch Callback chamado quando o usuário submete uma pesquisa
+ */
 @Composable
 fun SearchBar(onSearch: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
@@ -395,7 +447,12 @@ fun SearchBar(onSearch: (String) -> Unit) {
 
 // FUNÇÕES AUXILIARES
 
-// Obtém o ícone diurno com base na chave de condição
+/**
+ * Obtém o ID do recurso de ícone diurno com base na condição meteorológica.
+ *
+ * @param condition Condição meteorológica (ex: "clear", "cloudy", etc)
+ * @return ID do recurso de ícone correspondente à condição
+ */
 fun getDayIcon(condition: String): Int {
     return when {
         condition.contains("ensolarado", ignoreCase = true) || condition.contains("céu limpo", ignoreCase = true) -> R.drawable.sunny
@@ -405,7 +462,13 @@ fun getDayIcon(condition: String): Int {
     }
 }
 
-// Recebe se é noite e retorna o ícone final (para dia e noite)
+/**
+ * Obtém o ID do recurso de ícone com base na condição meteorológica e período do dia.
+ *
+ * @param condition Condição meteorológica
+ * @param isNight Indica se é período noturno
+ * @return ID do recurso de ícone correspondente à condição e período
+ */
 fun getIconForCondition(condition: String, isNight: Boolean): Int {
     val dayIcon = getDayIcon(condition)
     return if (!isNight) {
@@ -420,7 +483,12 @@ fun getIconForCondition(condition: String, isNight: Boolean): Int {
     }
 }
 
-// Verifica se um horário ISO "yyyy-MM-dd'T'HH:mm" é noturno
+/**
+ * Verifica se um determinado horário ISO representa um período noturno.
+ *
+ * @param dateTime Data e hora no formato ISO "yyyy-MM-dd'T'HH:mm"
+ * @return true se for período noturno, false caso contrário
+ */
 fun isNight(dateTime: String): Boolean {
     return try {
         val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault()).apply {
@@ -435,7 +503,12 @@ fun isNight(dateTime: String): Boolean {
     }
 }
 
-// Para previsão horária: verifica se o campo "hour" (formato "HH:mm") é noturno
+/**
+ * Verifica se uma hora específica representa um período noturno.
+ *
+ * @param hour Hora no formato "HH:mm"
+ * @return true se for período noturno, false caso contrário
+ */
 fun isNightHour(hour: String): Boolean {
     return try {
         val hourInt = hour.substring(0, 2).toInt()
@@ -445,13 +518,25 @@ fun isNightHour(hour: String): Boolean {
     }
 }
 
-// Para o clima atual e diária: usa a data/hora completa para definir se é noite
+/**
+ * Obtém o ID do recurso de ícone com base na condição e data/hora.
+ *
+ * @param condition Condição meteorológica
+ * @param dateTime Data e hora no formato ISO
+ * @return ID do recurso de ícone correspondente
+ */
 fun getDrawableResourceIdForTime(condition: String, dateTime: String): Int {
     val night = isNight(dateTime)
     return getIconForCondition(condition, night)
 }
 
-// Para previsão horária: usa a hora (formato "HH:mm") para definir se é noite
+/**
+ * Obtém o ID do recurso de ícone para previsão horária.
+ *
+ * @param picPath Caminho/chave da condição meteorológica
+ * @param hour Hora no formato "HH:mm"
+ * @return ID do recurso de ícone correspondente
+ */
 fun getHourlyDrawableResourceId(picPath: String, hour: String): Int {
     val dayIcon = getDrawableResourceId(picPath)
     val night = isNightHour(hour)
@@ -468,7 +553,12 @@ fun getHourlyDrawableResourceId(picPath: String, hour: String): Int {
     }
 }
 
-// Mapeia a chave para um drawable diurno simples
+/**
+ * Mapeia a chave para um drawable diurno simples
+ *
+ * @param picPath Caminho/chave da condição meteorológica
+ * @return ID do recurso de ícone correspondente
+ */
 fun getDrawableResourceId(picPath: String): Int {
     return when (picPath) {
         "sunny" -> R.drawable.sunny
@@ -478,7 +568,12 @@ fun getDrawableResourceId(picPath: String): Int {
     }
 }
 
-// Formata a data/hora do ISO para "EEE MMM dd | HH:mm"
+/**
+ * Formata uma string de data/hora ISO para um formato mais legível.
+ *
+ * @param isoString Data e hora no formato ISO "yyyy-MM-dd'T'HH:mm"
+ * @return Data e hora formatada como "EEE MMM dd | HH:mm"
+ */
 fun formatDateTime(isoString: String): String {
     return try {
         val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
@@ -489,3 +584,26 @@ fun formatDateTime(isoString: String): String {
         isoString
     }
 }
+
+/** Windsurf
+ * Prompt: "Baseado em todo o projeto, como posso deixar todos os icones, textos etc alinhados?"
+ * private val STANDARD_PADDING = 16.dp
+ * private val STANDARD_PADDING_SMALL = 8.dp
+ * private val STANDARD_PADDING_LARGE = 24.dp
+ * private val ICON_SIZE_SMALL = 30.dp
+ * private val ICON_SIZE_MEDIUM = 40.dp
+ * private val ICON_SIZE_LARGE = 150.dp
+ * private val CORNER_RADIUS = 25.dp
+ */
+
+/** Cursor
+ * Prompt: "Crie as classes de dados e entidades de banco de dados para este projeto."
+ * WeatherEntity, DailyForecastEntity, HourlyForecastEntity, LocationEntity
+ * OpenMeteoResponse, CurrentWeather, DailyForecast, HourlyForecast
+ * FutureModel, HourlyModel, LocationResult, ReverseGeocodeResponse
+ */
+
+/** Cursor
+ * Prompt: "Faça a documentação usando padrão KDoc para este projeto."
+ * Documentação KDoc
+ */
