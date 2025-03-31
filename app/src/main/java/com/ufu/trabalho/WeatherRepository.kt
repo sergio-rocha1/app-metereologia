@@ -1,5 +1,7 @@
-package com.uilover.project2022
+package com.uilover.trabalho
 
+import com.ufu.trabalho.model.FutureModel
+import com.ufu.trabalho.model.HourlyModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow

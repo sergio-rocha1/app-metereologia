@@ -1,4 +1,4 @@
-package com.uilover.project2022.ui.theme
+package com.uilover.trabalho.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle

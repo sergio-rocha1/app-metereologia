@@ -1,4 +1,4 @@
-package com.uilover.project2022
+package com.uilover.trabalho
 
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4

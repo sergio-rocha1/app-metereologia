@@ -1,4 +1,4 @@
-package com.uilover.project2022
+package com.ufu.trabalho.model
 
 data class FutureModel(
     val day:String,

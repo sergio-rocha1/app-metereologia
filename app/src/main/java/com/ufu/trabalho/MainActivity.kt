@@ -1,4 +1,4 @@
-package com.uilover.project2022
+package com.ufu.trabalho
 
 /**
  * Modificações de alinhamento e padronização de UI
@@ -12,12 +12,15 @@ package com.uilover.project2022
  * - Aprimoramento da acessibilidade com descrições de conteúdo
  * - Distribuição equilibrada de elementos na interface
  */
-
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -53,9 +56,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.uilover.project2022.ui.components.ErrorMessage
-import com.uilover.project2022.ui.components.LoadingIndicator
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import com.ufu.trabalho.model.FutureModel
+import com.ufu.trabalho.model.HourlyModel
+import com.ufu.trabalho.ui.components.CurrentWeatherUiState
+import com.ufu.trabalho.ui.components.DailyForecastUiState
+import com.ufu.trabalho.ui.components.HourlyForecastUiState
+import com.ufu.trabalho.viewmodel.WeatherViewModel
+import com.uilover.trabalho.ui.components.ErrorMessage
+import com.uilover.trabalho.ui.components.LoadingIndicator
 
 // MODIFICAÇÃO: Adicionadas constantes para padronização de dimensões em toda a UI
 // Isso garante consistência visual e facilita futuras alterações
@@ -68,336 +81,251 @@ private val ICON_SIZE_LARGE = 150.dp
 private val CORNER_RADIUS = 25.dp
 
 class MainActivity : ComponentActivity() {
+
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private val weatherViewModel: WeatherViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
         setContent {
-            WeatherScreen()
+            // Passa o viewModel e a função onRefresh para o composable
+            WeatherScreen(
+                viewModel = weatherViewModel,
+                onRefresh = { getLocationAndRefreshWeather() }
+            )
         }
 
         window.setFlags(
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         )
+
+        requestLocationPermission()
+    }
+
+    private fun requestLocationPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        } else {
+            getLocationAndRefreshWeather()
+        }
+    }
+
+    private val requestPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            if (isGranted) {
+                getLocationAndRefreshWeather()
+            } else {
+                // Trate o caso de permissão negada se necessário
+            }
+        }
+
+    private fun getLocationAndRefreshWeather() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+            location?.let {
+                weatherViewModel.refreshWeatherData(it.latitude, it.longitude)
+            }
+        }
     }
 }
 
 @Preview
 @Composable
-fun WeatherScreen(viewModel: WeatherViewModel = viewModel()) {
-    // Collect state flows from ViewModel
-    val currentWeatherState by viewModel.currentWeatherState.collectAsState()
-    val hourlyForecastState by viewModel.hourlyForecastState.collectAsState()
-    val dailyForecastState by viewModel.dailyForecastState.collectAsState()
-    
+fun WeatherScreen(viewModel: WeatherViewModel = viewModel(), onRefresh: () -> Unit = {}) {
+    // Coleta os três estados do ViewModel
+    val currentState by viewModel.currentWeatherState.collectAsState()
+    val hourlyState by viewModel.hourlyForecastState.collectAsState()
+    val dailyState by viewModel.dailyForecastState.collectAsState()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 brush = Brush.horizontalGradient(
                     colors = listOf(
-                        Color(android.graphics.Color.parseColor("#59469d")),
-                        Color(android.graphics.Color.parseColor("#643d67"))
+                        Color(0xFF59469D),
+                        Color(0xFF643D67)
                     )
                 )
             )
-    )
-    {
+    ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Current weather section
-                item {
-                    when (currentWeatherState) {
-                        is CurrentWeatherUiState.Loading -> {
-                            LoadingIndicator(modifier = Modifier.padding(top = 100.dp))
-                        }
-                        is CurrentWeatherUiState.Success -> {
-                            val weather = (currentWeatherState as CurrentWeatherUiState.Success).data
-                            
-                            // MODIFICAÇÃO: Ajustado o alinhamento do texto da condição climática
-                            // Substituído fillMaxSize por fillMaxWidth para melhor alinhamento
-                            // Adicionado padding horizontal padronizado
-                            Text(
-                                text = weather.condition,
-                                fontSize = 20.sp,
-                                color = Color.White,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 48.dp, start = STANDARD_PADDING_LARGE, end = STANDARD_PADDING_LARGE),
-                                textAlign = TextAlign.Center
-                            )
-
-                            // MODIFICAÇÃO: Melhorado o alinhamento da imagem e adicionada descrição de conteúdo
-                            // Substituído tamanho hardcoded por constante ICON_SIZE_LARGE
-                            // Adicionado align(Alignment.CenterHorizontally) para centralização explícita
-                            Image(
-                                painter = painterResource(id = R.drawable.cloudy_sunny),
-                                contentDescription = "Weather condition icon",
-                                modifier = Modifier
-                                    .size(ICON_SIZE_LARGE)
-                                    .padding(top = STANDARD_PADDING_SMALL)
-                                    .align(Alignment.CenterHorizontally)
-                            )
-
-                            //Display date and time
-                            // MODIFICAÇÃO: Padronizado o padding horizontal e vertical
-                            Text(
-                                text = weather.dateTime,
-                                fontSize = 19.sp,
-                                color = Color.White,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = STANDARD_PADDING_SMALL, start = STANDARD_PADDING_LARGE, end = STANDARD_PADDING_LARGE),
-                                textAlign = TextAlign.Center
-                            )
-
-                            //Display temperature details
-                            // MODIFICAÇÃO: Padronizado o padding horizontal e vertical
-                            Text(
-                                text = "${weather.temperature}°", 
-                                fontSize = 63.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = STANDARD_PADDING_SMALL, start = STANDARD_PADDING_LARGE, end = STANDARD_PADDING_LARGE),
-                                textAlign = TextAlign.Center
-                            )
-
-                            // MODIFICAÇÃO: Padronizado o padding horizontal e vertical
-                            Text(
-                                text = "H:${weather.highTemp} L:${weather.lowTemp}",
-                                fontSize = 16.sp,
-                                color = Color.White,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = STANDARD_PADDING_SMALL, start = STANDARD_PADDING_LARGE, end = STANDARD_PADDING_LARGE),
-                                textAlign = TextAlign.Center
-                            )
-
-                            //Box containing weather details like rain, wind speed, humidity
-                            // MODIFICAÇÃO: Padronizado o padding e o raio de arredondamento
-                            // Substituído valores hardcoded por constantes
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = STANDARD_PADDING_LARGE, vertical = STANDARD_PADDING)
-                                    .background(
-                                        color = colorResource(id = R.color.purple),
-                                        shape = RoundedCornerShape(CORNER_RADIUS)
-                                    )
-                            ) {
-                                // MODIFICAÇÃO: Alterado o arranjo horizontal para SpaceEvenly
-                                // Isso distribui os elementos uniformemente no espaço disponível
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(100.dp)
-                                        .padding(horizontal = STANDARD_PADDING_SMALL),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceEvenly
-                                ) {
-                                    WeatherDetailItem(
-                                        icon = R.drawable.rain,
-                                        value = "${weather.rainPercentage}%",
-                                        label = "Chuva"
-                                    )
-                                    WeatherDetailItem(
-                                        icon = R.drawable.wind,
-                                        value = weather.windSpeed,
-                                        label = "Velocidade do Vento"
-                                    )
-                                    WeatherDetailItem(
-                                        icon = R.drawable.humidity,
-                                        value = "${weather.humidity}%",
-                                        label = "Umidade"
-                                    )
-                                }
-                            }
-
-                            //Displaying "Today" label
-                            // MODIFICAÇÃO: Padronizado o padding e adicionado alinhamento de texto explícito
-                            Text(
-                                text = "Hoje",
-                                fontSize = 20.sp,
-                                color = Color.White,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = STANDARD_PADDING_LARGE, vertical = STANDARD_PADDING_SMALL),
-                                textAlign = TextAlign.Start
-                            )
-                        }
-                        is CurrentWeatherUiState.Error -> {
-                            val errorMessage = (currentWeatherState as CurrentWeatherUiState.Error).message
-                            ErrorMessage(message = errorMessage)
-                        }
-                    }
+            // Seção do clima atual
+            when (currentState) {
+                is CurrentWeatherUiState.Loading -> {
+                    LoadingIndicator(modifier = Modifier.padding(top = 100.dp))
                 }
-
-                //Display future hourly forecast using a LazyRow
-                item {
-                    when (hourlyForecastState) {
-                        is HourlyForecastUiState.Loading -> {
-                            LoadingIndicator(
-                                modifier = Modifier
-                                    .height(150.dp)
-                                    .fillMaxWidth()
-                            )
-                        }
-                        is HourlyForecastUiState.Success -> {
-                            val hourlyItems = (hourlyForecastState as HourlyForecastUiState.Success).data
-                            // MODIFICAÇÃO: Padronizado o espaçamento entre itens e o padding horizontal
-                            LazyRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentPadding = PaddingValues(horizontal = STANDARD_PADDING_LARGE),
-                                horizontalArrangement = Arrangement.spacedBy(STANDARD_PADDING_SMALL)
-                            ) {
-                                items(hourlyItems) { item ->
-                                    FutureModelViewHolder(item)
-                                }
-                            }
-                        }
-                        is HourlyForecastUiState.Error -> {
-                            val errorMessage = (hourlyForecastState as HourlyForecastUiState.Error).message
-                            ErrorMessage(
-                                message = errorMessage,
-                                modifier = Modifier
-                                    .height(150.dp)
-                                    .fillMaxWidth()
-                            )
-                        }
-                    }
-                }
-
-                //Display "Future" label and next 7 day button
-                item {
-                    // MODIFICAÇÃO: Padronizado o padding horizontal e vertical
-                    Row(
+                is CurrentWeatherUiState.Success -> {
+                    val current = (currentState as CurrentWeatherUiState.Success).data
+                    // Exibe os dados do clima atual
+                    Text(
+                        text = current.locationName.toUpperCase(),
+                        fontSize = 20.sp,
+                        color = Color.White,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = STANDARD_PADDING_LARGE, vertical = STANDARD_PADDING),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Futuro",
-                            fontSize = 20.sp,
-                            color = Color.White,
-                            modifier = Modifier.weight(1f)
-                        )
-                        
-                        // Refresh button
-                        // MODIFICAÇÃO: Adicionado arredondamento ao botão para combinar com o estilo do app
-                        Button(
-                            onClick = { viewModel.refreshWeatherData() },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = colorResource(id = R.color.purple)
-                            ),
-                            shape = RoundedCornerShape(CORNER_RADIUS / 2)
-                        ) {
-                            Text(
-                                text = "Atualizar",
-                                color = Color.White
-                            )
-                        }
-                    }
+                            .padding(top = 48.dp, start = STANDARD_PADDING_LARGE, end = STANDARD_PADDING_LARGE),
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Agora: ${current.temperature}°C",
+                        fontSize = 63.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = STANDARD_PADDING_SMALL, start = STANDARD_PADDING_LARGE, end = STANDARD_PADDING_LARGE),
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Vento: ${current.windSpeed}",
+                        fontSize = 16.sp,
+                        color = Color.White,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = STANDARD_PADDING_SMALL, start = STANDARD_PADDING_LARGE, end = STANDARD_PADDING_LARGE),
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Hora: ${current.dateTime}",
+                        fontSize = 16.sp,
+                        color = Color.White,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = STANDARD_PADDING_SMALL, start = STANDARD_PADDING_LARGE, end = STANDARD_PADDING_LARGE),
+                        textAlign = TextAlign.Center
+                    )
                 }
+                is CurrentWeatherUiState.Error -> {
+                    val errorMessage = (currentState as CurrentWeatherUiState.Error).message
+                    ErrorMessage(message = errorMessage)
+                }
+            }
 
-                //Display future daily forecast using a LazyColumn
-                item {
-                    when (dailyForecastState) {
-                        is DailyForecastUiState.Loading -> {
-                            LoadingIndicator(
-                                modifier = Modifier
-                                    .height(300.dp)
-                                    .fillMaxWidth()
-                            )
+            // Seção da previsão horária
+            when (hourlyState) {
+                is HourlyForecastUiState.Loading -> {
+                    LoadingIndicator(modifier = Modifier.height(150.dp).fillMaxWidth())
+                }
+                is HourlyForecastUiState.Success -> {
+                    val hourlyItems = (hourlyState as HourlyForecastUiState.Success).data
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = STANDARD_PADDING_LARGE),
+                        horizontalArrangement = Arrangement.spacedBy(STANDARD_PADDING_SMALL)
+                    ) {
+                        items(hourlyItems) { item ->
+                            FutureModelViewHolder(item)
                         }
-                        is DailyForecastUiState.Success -> {
-                            val dailyItems = (dailyForecastState as DailyForecastUiState.Success).data
-                            // MODIFICAÇÃO: Adicionado background com transparência e arredondamento
-                            // Isso melhora a separação visual da seção de previsão diária
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .wrapContentHeight()
-                                    .padding(horizontal = STANDARD_PADDING_LARGE)
-                                    .background(
-                                        color = colorResource(id = R.color.purple).copy(alpha = 0.3f),
-                                        shape = RoundedCornerShape(CORNER_RADIUS)
-                                    )
-                                    .padding(vertical = STANDARD_PADDING_SMALL)
-                            ) {
-                                dailyItems.forEach { item ->
-                                    FutureItem(item)
+                    }
+                }
+                is HourlyForecastUiState.Error -> {
+                    val errorMessage = (hourlyState as HourlyForecastUiState.Error).message
+                    ErrorMessage(
+                        message = errorMessage,
+                        modifier = Modifier.height(150.dp).fillMaxWidth()
+                    )
+                }
+            }
+
+            // Seção da previsão diária
+            when (dailyState) {
+                is DailyForecastUiState.Loading -> {
+                    LoadingIndicator(modifier = Modifier.height(300.dp).fillMaxWidth())
+                }
+                is DailyForecastUiState.Success -> {
+                    val dailyItems = (dailyState as DailyForecastUiState.Success).data
+                    Text(
+                        text = "Previsão para os próximos dias",
+                        fontSize = 20.sp,
+                        color = Color.White,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = STANDARD_PADDING_LARGE, vertical = STANDARD_PADDING_SMALL),
+                        textAlign = TextAlign.Start
+                    )
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = STANDARD_PADDING_LARGE, vertical = STANDARD_PADDING_SMALL),
+                        verticalArrangement = Arrangement.spacedBy(STANDARD_PADDING_SMALL)
+                    ) {
+                        items(dailyItems) { item ->
+                            DailyForecastItem(
+                                day = item.day,
+                                tempMax = item.highTemp.toDouble(),
+                                tempMin = item.lowTemp.toDouble(),
+                                iconRes = when (item.picPath) {
+                                    "sunny" -> R.drawable.sunny
+                                    "cloudy_sunny" -> R.drawable.cloudy_sunny
+                                    "storm" -> R.drawable.storm
+                                    else -> R.drawable.cloudy
                                 }
-                            }
-                        }
-                        is DailyForecastUiState.Error -> {
-                            val errorMessage = (dailyForecastState as DailyForecastUiState.Error).message
-                            ErrorMessage(
-                                message = errorMessage,
-                                modifier = Modifier
-                                    .height(300.dp)
-                                    .fillMaxWidth()
                             )
                         }
                     }
                 }
-                
-                // MODIFICAÇÃO: Adicionado espaço no final para melhorar a experiência de rolagem
-                // Isso evita que o último item fique cortado na parte inferior da tela
-                item {
-                    Box(modifier = Modifier.height(STANDARD_PADDING_LARGE))
+                is DailyForecastUiState.Error -> {
+                    val errorMessage = (dailyState as DailyForecastUiState.Error).message
+                    ErrorMessage(
+                        message = errorMessage,
+                        modifier = Modifier.height(300.dp).fillMaxWidth()
+                    )
                 }
+            }
+
+            // Botão de Atualizar
+            Button(
+                onClick = onRefresh,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colorResource(id = R.color.purple)
+                ),
+                shape = RoundedCornerShape(CORNER_RADIUS / 2),
+                modifier = Modifier
+                    .padding(horizontal = STANDARD_PADDING_LARGE, vertical = STANDARD_PADDING)
+                    .fillMaxWidth()
+            ) {
+                Text(text = "Atualizar", color = Color.White)
             }
         }
     }
 }
 
 @Composable
-fun FutureItem(item: FutureModel) {
-    // MODIFICAÇÃO: Padronizado o padding e adicionado arranjo horizontal SpaceBetween
-    // Isso distribui os elementos de forma mais equilibrada na linha
+fun DailyForecastItem(day: String, tempMax: Double, tempMin: Double, iconRes: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .background(
+                color = colorResource(id = R.color.purple).copy(alpha = 0.3f),
+                shape = RoundedCornerShape(CORNER_RADIUS)
+            )
             .padding(vertical = STANDARD_PADDING_SMALL, horizontal = STANDARD_PADDING),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
-            text = item.day,
+            text = day,
             fontSize = 16.sp,
             color = Color.White,
             modifier = Modifier.weight(1f)
         )
-
-        // MODIFICAÇÃO: Adicionada descrição de conteúdo para acessibilidade
-        // Substituído tamanho hardcoded por constante ICON_SIZE_SMALL
         Image(
-            painter = painterResource(id = getDrawableResourceId(item.picPath)),
-            contentDescription = "Weather icon for ${item.day}",
-            modifier = Modifier.size(ICON_SIZE_SMALL),
-            contentScale = ContentScale.Fit
+            painter = painterResource(id = iconRes),
+            contentDescription = "Ícone do clima",
+            modifier = Modifier.size(ICON_SIZE_SMALL)
         )
-
-        // MODIFICAÇÃO: Adicionado alinhamento de texto centralizado
         Text(
-            text = item.status,
-            fontSize = 16.sp,
-            color = Color.White,
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = STANDARD_PADDING_SMALL),
-            textAlign = TextAlign.Center
-        )
-
-        // MODIFICAÇÃO: Adicionado alinhamento de texto à direita
-        Text(
-            text = "${item.highTemp}°/${item.lowTemp}°",
+            text = "$tempMax° / $tempMin°",
             fontSize = 16.sp,
             color = Color.White,
             textAlign = TextAlign.End
@@ -405,91 +333,29 @@ fun FutureItem(item: FutureModel) {
     }
 }
 
-fun getDrawableResourceId(picPath: String): Int {
-    return when (picPath) {
-        "cloudy" -> R.drawable.cloudy
-        "cloudy_sunny" -> R.drawable.cloudy_sunny
-        "storm" -> R.drawable.storm
-        "sunny" -> R.drawable.sunny
-        else -> R.drawable.cloudy
-    }
-}
-
 @Composable
 fun FutureModelViewHolder(model: HourlyModel) {
-    // MODIFICAÇÃO: Padronizado o padding e o raio de arredondamento
-    Box(
-        modifier = Modifier
-            .padding(end = STANDARD_PADDING_SMALL)
-            .background(
-                color = colorResource(id = R.color.purple),
-                shape = RoundedCornerShape(CORNER_RADIUS)
-            )
+    // Layout para exibir previsão horária
+    Column(
+        modifier = Modifier.padding(STANDARD_PADDING),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // MODIFICAÇÃO: Substituído valor hardcoded por constante STANDARD_PADDING
-        Column(
-            modifier = Modifier
-                .padding(STANDARD_PADDING),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = model.hour,
-                color = Color.White,
-                fontSize = 16.sp
-            )
-
-            // MODIFICAÇÃO: Adicionada descrição de conteúdo para acessibilidade
-            // Substituído tamanho hardcoded por constante ICON_SIZE_MEDIUM
-            Image(
-                painter = painterResource(id = getDrawableResourceId(model.picPath)),
-                contentDescription = "Weather icon for ${model.hour}",
-                modifier = Modifier
-                    .size(ICON_SIZE_MEDIUM)
-                    .padding(vertical = STANDARD_PADDING_SMALL)
-            )
-
-            Text(
-                text = "${model.temp}°",
-                color = Color.White,
-                fontSize = 16.sp
-            )
-        }
+        Text(text = model.hour, color = Color.White, fontSize = 16.sp)
+        Image(
+            painter = painterResource(id = getDrawableResourceId(model.picPath)),
+            contentDescription = "Ícone para ${model.hour}",
+            modifier = Modifier.size(ICON_SIZE_MEDIUM)
+        )
+        Text(text = "${model.temp}°", color = Color.White, fontSize = 16.sp)
     }
 }
 
-@Composable
-fun WeatherDetailItem(icon: Int, value: String, label: String) {
-    // MODIFICAÇÃO: Adicionado arranjo vertical centralizado e padding horizontal
-    // Isso garante que os itens fiquem bem espaçados e alinhados
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = Modifier.padding(horizontal = STANDARD_PADDING_SMALL)
-    ) {
-        // MODIFICAÇÃO: Adicionada descrição de conteúdo para acessibilidade
-        // Substituído tamanho hardcoded por constante ICON_SIZE_SMALL
-        Image(
-            painter = painterResource(id = icon),
-            contentDescription = label,
-            modifier = Modifier.size(ICON_SIZE_SMALL)
-        )
-
-        // MODIFICAÇÃO: Padronizado o espaçamento e adicionado alinhamento de texto centralizado
-        Text(
-            text = value,
-            color = Color.White,
-            fontSize = 16.sp,
-            modifier = Modifier.padding(top = STANDARD_PADDING_SMALL / 2),
-            textAlign = TextAlign.Center
-        )
-
-        // MODIFICAÇÃO: Padronizado o espaçamento e adicionado alinhamento de texto centralizado
-        Text(
-            text = label,
-            color = Color.White,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(top = STANDARD_PADDING_SMALL / 2),
-            textAlign = TextAlign.Center
-        )
+// Função auxiliar para mapear o nome do ícone para um recurso drawable
+fun getDrawableResourceId(picPath: String): Int {
+    return when (picPath) {
+        "sunny" -> R.drawable.sunny
+        "cloudy_sunny" -> R.drawable.cloudy_sunny
+        "storm" -> R.drawable.storm
+        else -> R.drawable.cloudy
     }
 }
