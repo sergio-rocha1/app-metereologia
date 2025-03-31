@@ -33,7 +33,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -61,7 +61,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
-import com.ufu.trabalho.model.FutureModel
 import com.ufu.trabalho.model.HourlyModel
 import com.ufu.trabalho.ui.components.CurrentWeatherUiState
 import com.ufu.trabalho.ui.components.DailyForecastUiState
@@ -69,6 +68,8 @@ import com.ufu.trabalho.ui.components.HourlyForecastUiState
 import com.ufu.trabalho.viewmodel.WeatherViewModel
 import com.uilover.trabalho.ui.components.ErrorMessage
 import com.uilover.trabalho.ui.components.LoadingIndicator
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 // MODIFICAÇÃO: Adicionadas constantes para padronização de dimensões em toda a UI
 // Isso garante consistência visual e facilita futuras alterações
@@ -141,7 +142,10 @@ class MainActivity : ComponentActivity() {
 
 @Preview
 @Composable
-fun WeatherScreen(viewModel: WeatherViewModel = viewModel(), onRefresh: () -> Unit = {}) {
+fun WeatherScreen(
+    viewModel: WeatherViewModel = viewModel(),
+    onRefresh: () -> Unit = {}
+) {
     // Coleta os três estados do ViewModel
     val currentState by viewModel.currentWeatherState.collectAsState()
     val hourlyState by viewModel.hourlyForecastState.collectAsState()
@@ -159,142 +163,187 @@ fun WeatherScreen(viewModel: WeatherViewModel = viewModel(), onRefresh: () -> Un
                 )
             )
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            // Removemos o padding horizontal e deixamos só um padding vertical pequeno
+            contentPadding = PaddingValues(vertical = STANDARD_PADDING_SMALL),
+            verticalArrangement = Arrangement.spacedBy(STANDARD_PADDING_SMALL)
+        ) {
             // Seção do clima atual
-            when (currentState) {
-                is CurrentWeatherUiState.Loading -> {
-                    LoadingIndicator(modifier = Modifier.padding(top = 100.dp))
-                }
-                is CurrentWeatherUiState.Success -> {
-                    val current = (currentState as CurrentWeatherUiState.Success).data
-                    // Exibe os dados do clima atual
-                    Text(
-                        text = current.locationName.toUpperCase(),
-                        fontSize = 20.sp,
-                        color = Color.White,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 48.dp, start = STANDARD_PADDING_LARGE, end = STANDARD_PADDING_LARGE),
-                        textAlign = TextAlign.Center
-                    )
-                    Text(
-                        text = "Agora: ${current.temperature}°C",
-                        fontSize = 63.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = STANDARD_PADDING_SMALL, start = STANDARD_PADDING_LARGE, end = STANDARD_PADDING_LARGE),
-                        textAlign = TextAlign.Center
-                    )
-                    Text(
-                        text = "Vento: ${current.windSpeed}",
-                        fontSize = 16.sp,
-                        color = Color.White,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = STANDARD_PADDING_SMALL, start = STANDARD_PADDING_LARGE, end = STANDARD_PADDING_LARGE),
-                        textAlign = TextAlign.Center
-                    )
-                    Text(
-                        text = "Hora: ${current.dateTime}",
-                        fontSize = 16.sp,
-                        color = Color.White,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = STANDARD_PADDING_SMALL, start = STANDARD_PADDING_LARGE, end = STANDARD_PADDING_LARGE),
-                        textAlign = TextAlign.Center
-                    )
-                }
-                is CurrentWeatherUiState.Error -> {
-                    val errorMessage = (currentState as CurrentWeatherUiState.Error).message
-                    ErrorMessage(message = errorMessage)
+            item {
+                when (currentState) {
+                    is CurrentWeatherUiState.Loading -> {
+                        LoadingIndicator(modifier = Modifier.padding(top = 100.dp))
+                    }
+                    is CurrentWeatherUiState.Success -> {
+                        val current = (currentState as CurrentWeatherUiState.Success).data
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 48.dp) // espaço superior
+                                .padding(horizontal = STANDARD_PADDING_LARGE),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            // Nome da cidade
+                            Text(
+                                text = current.locationName.uppercase(),
+                                fontSize = 20.sp,
+                                color = Color.White,
+                                textAlign = TextAlign.Center
+                            )
+
+                            // Condição do clima
+                            Text(
+                                text = current.condition,
+                                fontSize = 20.sp,
+                                color = Color.White,
+                                modifier = Modifier.padding(top = STANDARD_PADDING_SMALL),
+                                textAlign = TextAlign.Center
+                            )
+
+                            // Ícone grande
+                            Image(
+                                painter = painterResource(
+                                    id = getDrawableResourceIdFromCondition(current.condition)
+                                ),
+                                contentDescription = "Ícone do clima",
+                                modifier = Modifier
+                                    .size(ICON_SIZE_LARGE)
+                                    .padding(top = STANDARD_PADDING_SMALL),
+                                contentScale = ContentScale.Fit
+                            )
+
+                            // Temperatura atual
+                            Text(
+                                text = "${current.temperature}°",
+                                fontSize = 63.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.padding(top = STANDARD_PADDING_SMALL),
+                                textAlign = TextAlign.Center
+                            )
+
+                            // Data/hora formatada
+                            Text(
+                                text = formatDateTime(current.dateTime),
+                                fontSize = 19.sp,
+                                color = Color.White,
+                                modifier = Modifier.padding(top = STANDARD_PADDING_SMALL),
+                                textAlign = TextAlign.Center
+                            )
+
+                            // Altas e baixas
+                            Text(
+                                text = "H:${current.highTemp} L:${current.lowTemp}",
+                                fontSize = 16.sp,
+                                color = Color.White,
+                                modifier = Modifier.padding(top = STANDARD_PADDING_SMALL),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                    is CurrentWeatherUiState.Error -> {
+                        val errorMessage = (currentState as CurrentWeatherUiState.Error).message
+                        ErrorMessage(message = errorMessage)
+                    }
                 }
             }
 
             // Seção da previsão horária
-            when (hourlyState) {
-                is HourlyForecastUiState.Loading -> {
-                    LoadingIndicator(modifier = Modifier.height(150.dp).fillMaxWidth())
-                }
-                is HourlyForecastUiState.Success -> {
-                    val hourlyItems = (hourlyState as HourlyForecastUiState.Success).data
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(horizontal = STANDARD_PADDING_LARGE),
-                        horizontalArrangement = Arrangement.spacedBy(STANDARD_PADDING_SMALL)
-                    ) {
-                        items(hourlyItems) { item ->
-                            FutureModelViewHolder(item)
+            item {
+                when (hourlyState) {
+                    is HourlyForecastUiState.Loading -> {
+                        LoadingIndicator(modifier = Modifier.height(150.dp).fillMaxWidth())
+                    }
+                    is HourlyForecastUiState.Success -> {
+                        val hourlyItems = (hourlyState as HourlyForecastUiState.Success).data
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = STANDARD_PADDING_LARGE),
+                            horizontalArrangement = Arrangement.spacedBy(STANDARD_PADDING_SMALL)
+                        ) {
+                            items(hourlyItems) { item ->
+                                FutureModelViewHolder(item)
+                            }
                         }
                     }
-                }
-                is HourlyForecastUiState.Error -> {
-                    val errorMessage = (hourlyState as HourlyForecastUiState.Error).message
-                    ErrorMessage(
-                        message = errorMessage,
-                        modifier = Modifier.height(150.dp).fillMaxWidth()
-                    )
+                    is HourlyForecastUiState.Error -> {
+                        val errorMessage = (hourlyState as HourlyForecastUiState.Error).message
+                        ErrorMessage(
+                            message = errorMessage,
+                            modifier = Modifier.height(150.dp).fillMaxWidth()
+                        )
+                    }
                 }
             }
 
-            // Seção da previsão diária
-            when (dailyState) {
-                is DailyForecastUiState.Loading -> {
-                    LoadingIndicator(modifier = Modifier.height(300.dp).fillMaxWidth())
-                }
-                is DailyForecastUiState.Success -> {
-                    val dailyItems = (dailyState as DailyForecastUiState.Success).data
-                    Text(
-                        text = "Previsão para os próximos dias",
-                        fontSize = 20.sp,
-                        color = Color.White,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = STANDARD_PADDING_LARGE, vertical = STANDARD_PADDING_SMALL),
-                        textAlign = TextAlign.Start
-                    )
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(horizontal = STANDARD_PADDING_LARGE, vertical = STANDARD_PADDING_SMALL),
-                        verticalArrangement = Arrangement.spacedBy(STANDARD_PADDING_SMALL)
-                    ) {
-                        items(dailyItems) { item ->
-                            DailyForecastItem(
-                                day = item.day,
-                                tempMax = item.highTemp.toDouble(),
-                                tempMin = item.lowTemp.toDouble(),
-                                iconRes = when (item.picPath) {
-                                    "sunny" -> R.drawable.sunny
-                                    "cloudy_sunny" -> R.drawable.cloudy_sunny
-                                    "storm" -> R.drawable.storm
-                                    else -> R.drawable.cloudy
-                                }
+            // Seção da previsão diária (usando Column para evitar altura infinita)
+            item {
+                when (dailyState) {
+                    is DailyForecastUiState.Loading -> {
+                        LoadingIndicator(modifier = Modifier.height(300.dp).fillMaxWidth())
+                    }
+                    is DailyForecastUiState.Success -> {
+                        val dailyItems = (dailyState as DailyForecastUiState.Success).data
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = STANDARD_PADDING_LARGE)
+                        ) {
+                            Text(
+                                text = "Previsão para os próximos dias",
+                                fontSize = 20.sp,
+                                color = Color.White,
+                                textAlign = TextAlign.Start
                             )
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(STANDARD_PADDING_SMALL)
+                            ) {
+                                dailyItems.forEach { item ->
+                                    DailyForecastItem(
+                                        day = item.day,
+                                        tempMax = item.highTemp.toDouble(),
+                                        tempMin = item.lowTemp.toDouble(),
+                                        iconRes = when (item.picPath) {
+                                            "sunny" -> R.drawable.sunny
+                                            "cloudy_sunny" -> R.drawable.cloudy_sunny
+                                            "storm" -> R.drawable.storm
+                                            else -> R.drawable.cloudy
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
-                }
-                is DailyForecastUiState.Error -> {
-                    val errorMessage = (dailyState as DailyForecastUiState.Error).message
-                    ErrorMessage(
-                        message = errorMessage,
-                        modifier = Modifier.height(300.dp).fillMaxWidth()
-                    )
+                    is DailyForecastUiState.Error -> {
+                        val errorMessage = (dailyState as DailyForecastUiState.Error).message
+                        ErrorMessage(
+                            message = errorMessage,
+                            modifier = Modifier.height(300.dp).fillMaxWidth()
+                        )
+                    }
                 }
             }
 
-            // Botão de Atualizar
-            Button(
-                onClick = onRefresh,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = colorResource(id = R.color.purple)
-                ),
-                shape = RoundedCornerShape(CORNER_RADIUS / 2),
-                modifier = Modifier
-                    .padding(horizontal = STANDARD_PADDING_LARGE, vertical = STANDARD_PADDING)
-                    .fillMaxWidth()
-            ) {
-                Text(text = "Atualizar", color = Color.White)
+            // Botão de Atualizar centralizado e com largura máxima limitada
+            item {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Button(
+                        onClick = onRefresh,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colorResource(id = R.color.purple)
+                        ),
+                        shape = RoundedCornerShape(CORNER_RADIUS / 2),
+                        modifier = Modifier.widthIn(max = 250.dp) // Limita a largura máxima
+                    ) {
+                        Text(text = "Atualizar", color = Color.White)
+                    }
+                }
             }
         }
     }
@@ -357,5 +406,31 @@ fun getDrawableResourceId(picPath: String): Int {
         "cloudy_sunny" -> R.drawable.cloudy_sunny
         "storm" -> R.drawable.storm
         else -> R.drawable.cloudy
+    }
+}
+
+/**
+ * Função auxiliar que retorna um ícone de acordo com a condição textual.
+ * Ajuste conforme a lógica que preferir.
+ */
+fun getDrawableResourceIdFromCondition(condition: String): Int {
+    return when {
+        condition.contains("ensolarado", ignoreCase = true) -> R.drawable.sunny
+        condition.contains("nublado", ignoreCase = true) -> R.drawable.cloudy_sunny
+        condition.contains("chuva", ignoreCase = true) -> R.drawable.storm
+        else -> R.drawable.cloudy
+    }
+}
+
+fun formatDateTime(isoString: String): String {
+    return try {
+        // Parser para o formato ISO recebido
+        val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
+        val date = parser.parse(isoString)
+        // Formatter para o formato desejado. "EEE" fornece o dia da semana abreviado
+        val formatter = SimpleDateFormat("EEE MMM dd | HH:mm", Locale("pt", "BR"))
+        formatter.format(date)
+    } catch (e: Exception) {
+        isoString // fallback caso ocorra erro
     }
 }

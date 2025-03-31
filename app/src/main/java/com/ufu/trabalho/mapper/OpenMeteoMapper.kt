@@ -4,6 +4,9 @@ import UiCurrentWeather
 import com.ufu.trabalho.model.FutureModel
 import com.ufu.trabalho.model.HourlyModel
 import com.ufu.trabalho.model.OpenMeteoResponse
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 object OpenMeteoMapper {
 
@@ -38,16 +41,16 @@ object OpenMeteoMapper {
     }
 
     fun toHourlyList(api: OpenMeteoResponse): List<HourlyModel> {
-        // Exemplo fixo para previsão horária
-        val hours = listOf("09:00", "10:00", "11:00", "12:00", "13:00")
-        val temps = listOf(28, 27, 26, 25, 24)
-        val weatherCodes = listOf(1, 1, 1, 2, 2)
-
-        return hours.indices.map { i ->
+        // Verifica se os dados horários existem
+        val hourly = api.hourly ?: return emptyList()
+        // Define o número máximo de horas que deseja exibir
+        val count = minOf(10, hourly.time.size)
+        return (0 until count).map { i ->
             HourlyModel(
-                hour = hours[i],
-                temp = temps[i],
-                picPath = codeToPicPath(weatherCodes[i])
+                // Se o formato for ISO (ex.: "2025-03-30T09:00"), extrai a parte de hora
+                hour = if (hourly.time[i].length >= 16) hourly.time[i].substring(11, 16) else hourly.time[i],
+                temp = hourly.temperature[i].toInt(),
+                picPath = codeToPicPath(hourly.weathercode[i])
             )
         }
     }
@@ -90,7 +93,22 @@ object OpenMeteoMapper {
     }
 
     private fun dayToWeekday(day: String): String {
-        // Exemplo simplificado: converter "2025-03-25" em "Seg"
-        return "Seg"
+        return try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val date = sdf.parse(day)
+            val calendar = Calendar.getInstance().apply { time = date }
+            when (calendar.get(Calendar.DAY_OF_WEEK)) {
+                Calendar.MONDAY -> "Seg"
+                Calendar.TUESDAY -> "Ter"
+                Calendar.WEDNESDAY -> "Qua"
+                Calendar.THURSDAY -> "Qui"
+                Calendar.FRIDAY -> "Sex"
+                Calendar.SATURDAY -> "Sáb"
+                Calendar.SUNDAY -> "Dom"
+                else -> day
+            }
+        } catch (e: Exception) {
+            day // fallback se ocorrer erro
+        }
     }
 }

@@ -29,6 +29,7 @@ class WeatherRepository {
                 parameters.append("longitude", lon.toString())
                 parameters.append("daily", "temperature_2m_max,temperature_2m_min,weathercode")
                 parameters.append("current_weather", "true")
+                parameters.append("hourly", "temperature_2m,weathercode") // adiciona dados horários reais
                 parameters.append("forecast_days", "7") // Adicionado para garantir 7 dias de previsão
                 parameters.append("timezone", "auto")
             }

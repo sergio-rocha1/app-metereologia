@@ -9,7 +9,8 @@ data class OpenMeteoResponse(
     val currentWeather: CurrentWeather,
     val daily: DailyForecast,
     @SerializedName("daily_units")
-    val dailyUnits: DailyUnits? = null
+    val dailyUnits: DailyUnits? = null,
+    val hourly: HourlyForecast? = null  // novo campo para dados horários
 )
 
 data class CurrentWeather(
@@ -36,4 +37,11 @@ data class DailyUnits(
     @SerializedName("temperature_2m_min")
     val temperatureMin: String,
     val weathercode: String
+)
+
+data class HourlyForecast(
+    val time: List<String>,
+    @SerializedName("temperature_2m")
+    val temperature: List<Double>,
+    val weathercode: List<Int>
 )
