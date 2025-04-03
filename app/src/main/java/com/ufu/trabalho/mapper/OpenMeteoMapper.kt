@@ -10,6 +10,13 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
+data class WeatherExtras(
+    val precipitationProbability: Int,
+    val windSpeed: Double,
+    val humidity: Int,
+    val uvIndex: Double
+)
+
 object OpenMeteoMapper {
 
     fun toCurrentWeather(api: OpenMeteoResponse): UiCurrentWeather {
@@ -27,16 +34,15 @@ object OpenMeteoMapper {
             else -> "Desconhecido"
         }
 
-        val humidity = 18
-
+        // Neste exemplo, os dados extras serão tratados separadamente (via toWeatherExtras)
         return UiCurrentWeather(
             temperature = current.temperature.toInt(),
             condition = conditionString,
             highTemp = high,
             lowTemp = low,
-            rainPercentage = 22,
+            rainPercentage = 22, // Valor padrão; substitua se tiver valor real
             windSpeed = "${current.windspeed.toInt()} Km/h",
-            humidity = humidity,
+            humidity = 18, // Valor padrão; os dados extras virão de outra função
             dateTime = current.time,
             locationName = ""
         )
@@ -44,12 +50,9 @@ object OpenMeteoMapper {
 
     fun toHourlyList(api: OpenMeteoResponse): List<HourlyModel> {
         val hourly = api.hourly ?: return emptyList()
-        // Configura o parser para o formato ISO e define o fuso horário
         val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
         parser.timeZone = TimeZone.getTimeZone("America/Sao_Paulo")
-        // Obtenha o horário atual
         val now = Date()
-        // Filtra os índices cujos horários são futuros
         val futureIndices = hourly.time.indices.filter { i ->
             try {
                 val forecastTime = parser.parse(hourly.time[i])
@@ -58,12 +61,9 @@ object OpenMeteoMapper {
                 false
             }
         }
-
-        // Limite a 10 itens, se houver mais
         val count = minOf(10, futureIndices.size)
         return futureIndices.take(count).map { i ->
             HourlyModel(
-                // Extrai somente a parte da hora (HH:mm) se o formato for ISO
                 hour = if (hourly.time[i].length >= 16) hourly.time[i].substring(11, 16) else hourly.time[i],
                 temp = hourly.temperature[i].toInt(),
                 picPath = codeToPicPath(hourly.weathercode[i])
@@ -74,11 +74,10 @@ object OpenMeteoMapper {
     fun toFutureList(api: OpenMeteoResponse): List<FutureModel> {
         val daily = api.daily
         return daily.time.indices.map { i ->
-            val day = daily.time[i]  // ex: "2025-03-25"
+            val day = daily.time[i]
             val high = daily.temperatureMax[i].toInt()
             val low = daily.temperatureMin[i].toInt()
             val code = daily.weathercode[i]
-
             FutureModel(
                 day = dayToWeekday(day),
                 picPath = codeToPicPath(code),
@@ -86,6 +85,24 @@ object OpenMeteoMapper {
                 highTemp = high,
                 lowTemp = low
             )
+        }
+    }
+
+    /**
+     * Mapeia os dados extras dos parâmetros horários.
+     * Neste exemplo, usamos os valores do primeiro índice da lista.
+     */
+    fun toWeatherExtras(api: OpenMeteoResponse): WeatherExtras {
+        val hourly = api.hourly
+        return if (hourly != null && hourly.time.isNotEmpty()) {
+            WeatherExtras(
+                precipitationProbability = hourly.precipitationProbability.getOrNull(0) ?: 0,
+                windSpeed = hourly.windSpeed.getOrNull(0) ?: 0.0,
+                humidity = hourly.relativeHumidity.getOrNull(0) ?: 0,
+                uvIndex = hourly.uvIndex.getOrNull(0) ?: 0.0
+            )
+        } else {
+            WeatherExtras(0, 0.0, 0, 0.0)
         }
     }
 
@@ -124,7 +141,7 @@ object OpenMeteoMapper {
                 else -> day
             }
         } catch (e: Exception) {
-            day // fallback se ocorrer erro
+            day
         }
     }
 }

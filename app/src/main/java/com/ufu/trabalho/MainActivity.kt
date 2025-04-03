@@ -11,12 +11,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,13 +27,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -45,11 +49,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
@@ -57,6 +62,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import com.ufu.trabalho.database.LocationEntity
+import com.ufu.trabalho.mapper.WeatherExtras
 import com.ufu.trabalho.model.HourlyModel
 import com.ufu.trabalho.ui.components.CurrentWeatherUiState
 import com.ufu.trabalho.ui.components.DailyForecastUiState
@@ -66,6 +73,7 @@ import com.uilover.trabalho.ui.components.ErrorMessage
 import com.uilover.trabalho.ui.components.LoadingIndicator
 import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
@@ -164,187 +172,350 @@ class MainActivity : ComponentActivity() {
 /**
  * Composable principal que exibe a tela de previsão do tempo.
  *
- * @param viewModel ViewModel que gerencia os dados meteorológicos
+ * Por padrão, apresenta os dados meteorológicos da cidade da localização atual.
+ * Possui um botão de busca (no canto superior direito) e um botão para exibir as cidades já pesquisadas (no canto superior esquerdo).
+ * Ao clicar no botão da esquerda, é exibido um diálogo com as cidades salvas, cada uma mostrando sua última data de atualização.
+ * Em cada opção, há um botão para excluir a cidade ou clicar nela para buscar a previsão atualizada.
+ *
+ * @param viewModel ViewModel que gerencia os dados meteorológicos e as localizações salvas
  * @param onRefresh Callback para atualizar os dados meteorológicos
  */
-@Preview
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeatherScreen(
     viewModel: WeatherViewModel = viewModel(),
     onRefresh: () -> Unit = {}
 ) {
-    // Coleta estados do ViewModel
+    // Estados para controle da busca e do diálogo de localizações salvas
+    var isSearching by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var showLocationsDialog by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+
+    // Coleta os estados do ViewModel
     val currentState by viewModel.currentWeatherState.collectAsState()
     val hourlyState by viewModel.hourlyForecastState.collectAsState()
     val dailyState by viewModel.dailyForecastState.collectAsState()
+    val savedLocations by viewModel.savedLocations.collectAsState(initial = emptyList())
+    // Novo estado para os dados extras
+    val extras by viewModel.weatherExtrasState.collectAsState()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.horizontalGradient(
-                    colors = listOf(Color(0xFF59469D), Color(0xFF643D67))
-                )
-            )
-    ) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(vertical = STANDARD_PADDING_SMALL),
-            verticalArrangement = Arrangement.spacedBy(STANDARD_PADDING_SMALL)
-        ) {
-            // Barra de pesquisa
-            item {
-                Spacer(modifier = Modifier.height(32.dp))
-                SearchBar(onSearch = { query -> viewModel.searchAndRefresh(query) })
-            }
-            // Clima atual
-            item {
-                when (currentState) {
-                    is CurrentWeatherUiState.Loading -> LoadingIndicator(modifier = Modifier.padding(top = 100.dp))
-                    is CurrentWeatherUiState.Success -> {
-                        val current = (currentState as CurrentWeatherUiState.Success).data
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = STANDARD_PADDING_LARGE)
-                                .padding(horizontal = STANDARD_PADDING_LARGE),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = current.locationName.uppercase(),
-                                fontSize = 20.sp,
-                                color = Color.White,
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = current.condition,
-                                fontSize = 20.sp,
-                                color = Color.White,
-                                modifier = Modifier.padding(top = STANDARD_PADDING_SMALL),
-                                textAlign = TextAlign.Center
-                            )
-                            Image(
-                                painter = painterResource(
-                                    id = getDrawableResourceIdForTime(current.condition, current.dateTime)
+    Scaffold(
+        content = { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(Color(0xFF59469D), Color(0xFF643D67))
+                        )
+                    )
+                    .padding(innerPadding)
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(vertical = STANDARD_PADDING_SMALL),
+                    verticalArrangement = Arrangement.spacedBy(STANDARD_PADDING_SMALL)
+                ) {
+                    // Se estiver em modo busca, insere a barra de pesquisa como primeiro item
+                    if (isSearching) {
+                        item {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = { Text("Pesquisar cidade...", color = Color.Gray) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Search),
+                                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                                    onSearch = {
+                                        viewModel.searchAndRefresh(searchQuery)
+                                        isSearching = false
+                                        focusManager.clearFocus()
+                                    }
                                 ),
-                                contentDescription = "Ícone do clima",
+                                textStyle = LocalTextStyle.current.copy(color = Color.Black),
+                                colors = TextFieldDefaults.outlinedTextFieldColors(
+                                    containerColor = Color.White
+                                ),
                                 modifier = Modifier
-                                    .size(ICON_SIZE_LARGE)
-                                    .padding(top = STANDARD_PADDING_SMALL),
-                                contentScale = ContentScale.Fit
-                            )
-                            Text(
-                                text = "${current.temperature}°",
-                                fontSize = 63.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                modifier = Modifier.padding(top = STANDARD_PADDING_SMALL),
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = formatDateTime(current.dateTime),
-                                fontSize = 19.sp,
-                                color = Color.White,
-                                modifier = Modifier.padding(top = STANDARD_PADDING_SMALL),
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = "H:${current.highTemp} L:${current.lowTemp}",
-                                fontSize = 16.sp,
-                                color = Color.White,
-                                modifier = Modifier.padding(top = STANDARD_PADDING_SMALL),
-                                textAlign = TextAlign.Center
+                                    .fillMaxWidth()
+                                    .padding(horizontal = STANDARD_PADDING)
                             )
                         }
                     }
-                    is CurrentWeatherUiState.Error -> {
-                        val errorMessage = (currentState as CurrentWeatherUiState.Error).message
-                        ErrorMessage(message = errorMessage)
-                    }
-                }
-            }
-            // Previsão horária
-            item {
-                when (hourlyState) {
-                    is HourlyForecastUiState.Loading -> LoadingIndicator(modifier = Modifier.height(150.dp).fillMaxWidth())
-                    is HourlyForecastUiState.Success -> {
-                        val hourlyItems = (hourlyState as HourlyForecastUiState.Success).data
-                        LazyRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentPadding = PaddingValues(horizontal = STANDARD_PADDING_LARGE),
-                            horizontalArrangement = Arrangement.spacedBy(STANDARD_PADDING_SMALL)
-                        ) {
-                            items(hourlyItems) { item ->
-                                FutureModelViewHolder(item)
-                            }
-                        }
-                    }
-                    is HourlyForecastUiState.Error -> {
-                        val errorMessage = (hourlyState as HourlyForecastUiState.Error).message
-                        ErrorMessage(message = errorMessage, modifier = Modifier.height(150.dp).fillMaxWidth())
-                    }
-                }
-            }
-            // Previsão diária
-            item {
-                when (dailyState) {
-                    is DailyForecastUiState.Loading -> LoadingIndicator(modifier = Modifier.height(300.dp).fillMaxWidth())
-                    is DailyForecastUiState.Success -> {
-                        val dailyItems = (dailyState as DailyForecastUiState.Success).data
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = STANDARD_PADDING_LARGE)
-                        ) {
-                            Text(
-                                text = "Previsão para os próximos dias",
-                                fontSize = 20.sp,
-                                color = Color.White,
-                                textAlign = TextAlign.Start
-                            )
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(STANDARD_PADDING_SMALL)
-                            ) {
-                                dailyItems.forEach { item ->
-                                    DailyForecastItem(
-                                        day = item.day,
-                                        tempMax = item.highTemp.toDouble(),
-                                        tempMin = item.lowTemp.toDouble(),
-                                        // Aqui usamos nossa nova função para previsão diária,
-                                        // que verifica se o dia atual é noturno (baseado em data ou outro critério)
-                                        iconRes = getDrawableResourceIdForTime(item.status, item.day)
+                    // Exibe os dados do clima atual
+                    item {
+                        when (currentState) {
+                            is CurrentWeatherUiState.Loading ->
+                                LoadingIndicator(modifier = Modifier.padding(top = 100.dp))
+                            is CurrentWeatherUiState.Success -> {
+                                val current = (currentState as CurrentWeatherUiState.Success).data
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = STANDARD_PADDING_LARGE)
+                                        .padding(horizontal = STANDARD_PADDING_LARGE),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = current.locationName.uppercase(),
+                                        fontSize = 20.sp,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Text(
+                                        text = current.condition,
+                                        fontSize = 20.sp,
+                                        color = Color.White,
+                                        modifier = Modifier.padding(top = STANDARD_PADDING_SMALL),
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Image(
+                                        painter = painterResource(
+                                            id = getDrawableResourceIdForTime(current.condition, current.dateTime)
+                                        ),
+                                        contentDescription = "Ícone do clima",
+                                        modifier = Modifier
+                                            .size(ICON_SIZE_LARGE)
+                                            .padding(top = STANDARD_PADDING_SMALL),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                    Text(
+                                        text = "${current.temperature}°",
+                                        fontSize = 63.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        modifier = Modifier.padding(top = STANDARD_PADDING_SMALL),
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Text(
+                                        text = formatDateTime(current.dateTime),
+                                        fontSize = 19.sp,
+                                        color = Color.White,
+                                        modifier = Modifier.padding(top = STANDARD_PADDING_SMALL),
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Text(
+                                        text = "L:${current.lowTemp} H:${current.highTemp}",
+                                        fontSize = 16.sp,
+                                        color = Color.White,
+                                        modifier = Modifier.padding(top = STANDARD_PADDING_SMALL),
+                                        textAlign = TextAlign.Center
                                     )
                                 }
                             }
+                            is CurrentWeatherUiState.Error -> {
+                                val errorMessage = (currentState as CurrentWeatherUiState.Error).message
+                                ErrorMessage(message = errorMessage)
+                            }
                         }
                     }
-                    is DailyForecastUiState.Error -> {
-                        val errorMessage = (dailyState as DailyForecastUiState.Error).message
-                        ErrorMessage(message = errorMessage, modifier = Modifier.height(300.dp).fillMaxWidth())
+                    // Exibe os dados extras (se disponíveis)
+                    extras?.let {
+                        item {
+                            WeatherExtrasView(extras = it)
+                        }
+                    }
+                    // Previsão horária
+                    item {
+                        when (hourlyState) {
+                            is HourlyForecastUiState.Loading ->
+                                LoadingIndicator(modifier = Modifier.height(150.dp).fillMaxWidth())
+                            is HourlyForecastUiState.Success -> {
+                                val hourlyItems = (hourlyState as HourlyForecastUiState.Success).data
+                                LazyRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentPadding = PaddingValues(horizontal = STANDARD_PADDING_LARGE),
+                                    horizontalArrangement = Arrangement.spacedBy(STANDARD_PADDING_SMALL)
+                                ) {
+                                    items(hourlyItems) { item ->
+                                        FutureModelViewHolder(item)
+                                    }
+                                }
+                            }
+                            is HourlyForecastUiState.Error -> {
+                                val errorMessage = (hourlyState as HourlyForecastUiState.Error).message
+                                ErrorMessage(
+                                    message = errorMessage,
+                                    modifier = Modifier.height(150.dp).fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                    // Previsão diária
+                    item {
+                        when (dailyState) {
+                            is DailyForecastUiState.Loading ->
+                                LoadingIndicator(modifier = Modifier.height(300.dp).fillMaxWidth())
+                            is DailyForecastUiState.Success -> {
+                                val dailyItems = (dailyState as DailyForecastUiState.Success).data
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = STANDARD_PADDING_LARGE)
+                                ) {
+                                    Text(
+                                        text = "Previsão para os próximos dias",
+                                        fontSize = 20.sp,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Start
+                                    )
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(STANDARD_PADDING_SMALL)
+                                    ) {
+                                        dailyItems.forEach { item ->
+                                            DailyForecastItem(
+                                                day = item.day,
+                                                tempMax = item.highTemp.toDouble(),
+                                                tempMin = item.lowTemp.toDouble(),
+                                                iconRes = getDrawableResourceIdForTime(item.status, item.day)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            is DailyForecastUiState.Error -> {
+                                val errorMessage = (dailyState as DailyForecastUiState.Error).message
+                                ErrorMessage(
+                                    message = errorMessage,
+                                    modifier = Modifier.height(300.dp).fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                    // Botão de atualizar centralizado
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Button(
+                                onClick = onRefresh,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = colorResource(id = R.color.purple)
+                                ),
+                                shape = RoundedCornerShape(CORNER_RADIUS / 2),
+                                modifier = Modifier.widthIn(max = 250.dp)
+                            ) {
+                                Text(text = "Atualizar", color = Color.White)
+                            }
+                        }
                     }
                 }
-            }
-            // Botão de atualizar centralizado
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Button(
-                        onClick = onRefresh,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = colorResource(id = R.color.purple)
-                        ),
-                        shape = RoundedCornerShape(CORNER_RADIUS / 2),
-                        modifier = Modifier.widthIn(max = 250.dp)
+                // Botão de busca no canto superior direito
+                if (!isSearching) {
+                    IconButton(
+                        onClick = { isSearching = true },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(16.dp)
+                            .size(36.dp)
+                            .background(Color.White, shape = RoundedCornerShape(50))
                     ) {
-                        Text(text = "Atualizar", color = Color.White)
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_search),
+                            contentDescription = "Pesquisar",
+                            tint = Color(0xFF643D67)
+                        )
                     }
+                }
+                // Botão para exibir as cidades salvas no canto superior esquerdo
+                if (!isSearching) {
+                    IconButton(
+                        onClick = { showLocationsDialog = true },
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(16.dp)
+                            .size(36.dp)
+                            .background(Color.White, shape = RoundedCornerShape(50))
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_list),
+                            contentDescription = "Cidades Salvas",
+                            tint = Color(0xFF643D67)
+                        )
+                    }
+                }
+                // Diálogo com as cidades salvas
+                if (showLocationsDialog) {
+                    SavedLocationsDialog(
+                        locations = savedLocations,
+                        onDismiss = { showLocationsDialog = false },
+                        onLocationSelected = { location ->
+                            // Atualiza o timestamp e busca dados atualizados para a localização selecionada
+                            viewModel.updateLocationAccessed(location.id)
+                            viewModel.refreshWeatherData(location.latitude.toDouble(), location.longitude.toDouble())
+                            showLocationsDialog = false
+                        },
+                        onDelete = { location ->
+                            viewModel.deleteLocation(location.id)
+                        }
+                    )
                 }
             }
         }
-    }
+    )
+}
+
+/**
+ * Composable que exibe um diálogo com a lista de cidades salvas.
+ *
+ * Cada item mostra o nome da cidade e a última data de atualização.
+ * Possui um botão para excluir a cidade ou clicar nela para buscar a previsão atualizada.
+ *
+ * @param locations Lista de localizações salvas
+ * @param onDismiss Ação ao fechar o diálogo
+ * @param onLocationSelected Ação ao selecionar uma localização (busca a previsão atualizada)
+ * @param onDelete Ação para excluir a localização do banco de dados
+ */
+@Composable
+fun SavedLocationsDialog(
+    locations: List<LocationEntity>,
+    onDismiss: () -> Unit,
+    onLocationSelected: (LocationEntity) -> Unit,
+    onDelete: (LocationEntity) -> Unit
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Cidades Salvas") },
+        text = {
+            LazyColumn {
+                items(locations) { location ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                            .clickable { onLocationSelected(location) },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = location.displayName,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Atualizado: ${formatTimestamp(location.lastAccessed)}",
+                                fontSize = 12.sp
+                            )
+                        }
+                        IconButton(onClick = { onDelete(location) }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_delete),
+                                contentDescription = "Excluir"
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("Fechar")
+            }
+        }
+    )
 }
 
 /**
@@ -380,7 +551,7 @@ fun DailyForecastItem(day: String, tempMax: Double, tempMin: Double, iconRes: In
             modifier = Modifier.size(ICON_SIZE_SMALL)
         )
         Text(
-            text = "$tempMax° / $tempMin°",
+            text = "$tempMin° / $tempMax°",
             fontSize = 16.sp,
             color = Color.White,
             textAlign = TextAlign.End
@@ -411,41 +582,52 @@ fun FutureModelViewHolder(model: HourlyModel) {
     }
 }
 
-/**
- * Composable que implementa uma barra de pesquisa para buscar localizações.
- *
- * @param onSearch Callback chamado quando o usuário submete uma pesquisa
- */
 @Composable
-fun SearchBar(onSearch: (String) -> Unit) {
-    var query by remember { mutableStateOf("") }
-    OutlinedTextField(
-        value = query,
-        onValueChange = { query = it },
+fun WeatherExtrasView(extras: WeatherExtras) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        placeholder = {
-            Text(
-                text = "Pesquisar cidade, estado ou país",
-                color = Color.LightGray
-            )
-        },
-        singleLine = true,
-        textStyle = LocalTextStyle.current.copy(color = Color.White),
-        trailingIcon = {
-            IconButton(onClick = { onSearch(query) }) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_search),
-                    contentDescription = "Buscar",
-                    tint = Color.White
-                )
-            }
-        }
-    )
+            .padding(horizontal = STANDARD_PADDING, vertical = STANDARD_PADDING_SMALL),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        WeatherExtraItem(
+            iconRes = R.drawable.rainy, // Ícone para probabilidade de chuva
+            label = "Chuva",
+            value = "${extras.precipitationProbability}%"
+        )
+        WeatherExtraItem(
+            iconRes = R.drawable.wind, // Ícone para velocidade do vento
+            label = "Vento",
+            value = "${extras.windSpeed} km/h"
+        )
+        WeatherExtraItem(
+            iconRes = R.drawable.humidity, // Ícone para umidade
+            label = "Umidade",
+            value = "${extras.humidity}%"
+        )
+        WeatherExtraItem(
+            iconRes = R.drawable.ic_uv, // Ícone para UV
+            label = "UV",
+            value = extras.uvIndex.toString()
+        )
+    }
 }
 
-// FUNÇÕES AUXILIARES
+@Composable
+fun WeatherExtraItem(iconRes: Int, label: String, value: String) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(8.dp)
+    ) {
+        Image(
+            painter = painterResource(id = iconRes),
+            contentDescription = label,
+            modifier = Modifier.size(40.dp)
+        )
+        Text(text = label, fontSize = 14.sp, color = Color.White)
+        Text(text = value, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+    }
+}
 
 /**
  * Obtém o ID do recurso de ícone diurno com base na condição meteorológica.
@@ -583,6 +765,16 @@ fun formatDateTime(isoString: String): String {
     } catch (e: Exception) {
         isoString
     }
+}
+
+/**
+ * Helper para formatar o timestamp (em milissegundos) para uma string legível.
+ */
+fun formatTimestamp(timestamp: Long): String {
+    val date = Date(timestamp)
+    val formatter = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+    formatter.timeZone = TimeZone.getTimeZone("America/Sao_Paulo")
+    return formatter.format(date)
 }
 
 /** Windsurf

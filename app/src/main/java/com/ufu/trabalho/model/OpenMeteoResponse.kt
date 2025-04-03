@@ -10,7 +10,7 @@ data class OpenMeteoResponse(
     val daily: DailyForecast,
     @SerializedName("daily_units")
     val dailyUnits: DailyUnits? = null,
-    val hourly: HourlyForecast? = null  // novo campo para dados horários
+    val hourly: HourlyForecast? = null
 )
 
 data class CurrentWeather(
@@ -27,7 +27,9 @@ data class DailyForecast(
     val temperatureMax: List<Double>,
     @SerializedName("temperature_2m_min")
     val temperatureMin: List<Double>,
-    val weathercode: List<Int>
+    val weathercode: List<Int>,
+    @SerializedName("precipitation_probability_max")
+    val precipitationProbabilityMax: List<Int>? = null  // opcional, se disponível
 )
 
 data class DailyUnits(
@@ -36,12 +38,22 @@ data class DailyUnits(
     val temperatureMax: String,
     @SerializedName("temperature_2m_min")
     val temperatureMin: String,
-    val weathercode: String
+    val weathercode: String,
+    @SerializedName("precipitation_probability_max")
+    val precipitationProbabilityMax: String? = null
 )
 
 data class HourlyForecast(
     val time: List<String>,
     @SerializedName("temperature_2m")
     val temperature: List<Double>,
-    val weathercode: List<Int>
+    val weathercode: List<Int>,
+    @SerializedName("relativehumidity_2m")
+    val relativeHumidity: List<Int>,
+    @SerializedName("wind_speed_10m")
+    val windSpeed: List<Double>,
+    @SerializedName("precipitation_probability")
+    val precipitationProbability: List<Int>,
+    @SerializedName("uv_index")
+    val uvIndex: List<Double>
 )

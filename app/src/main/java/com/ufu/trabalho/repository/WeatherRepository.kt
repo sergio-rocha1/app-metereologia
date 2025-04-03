@@ -1,6 +1,9 @@
 package com.ufu.trabalho.repository
 
+import android.content.Context
 import com.google.gson.Gson
+import com.ufu.trabalho.database.LocationEntity
+import com.ufu.trabalho.database.WeatherDatabase
 import com.ufu.trabalho.model.LocationResult
 import com.ufu.trabalho.model.OpenMeteoResponse
 import com.ufu.trabalho.model.ReverseGeocodeResponse
@@ -9,9 +12,10 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.json.Json
 
-class WeatherRepository {
+class WeatherRepository(private val context: Context) {
 
     // Configuração do Ktor Client com suporte a JSON (para Open-Meteo)
     private val client = HttpClient {
@@ -28,10 +32,12 @@ class WeatherRepository {
             url {
                 parameters.append("latitude", lat.toString())
                 parameters.append("longitude", lon.toString())
-                parameters.append("daily", "temperature_2m_max,temperature_2m_min,weathercode")
+                // Dados diários (por exemplo, máxima/mínima e probabilidade de chuva máxima)
+                parameters.append("daily", "temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max")
+                // Dados horários: além de temperatura e código, adicionamos umidade, velocidade do vento, probabilidade de chuva e UV
+                parameters.append("hourly", "temperature_2m,weathercode,relativehumidity_2m,wind_speed_10m,precipitation_probability,uv_index")
                 parameters.append("current_weather", "true")
-                parameters.append("hourly", "temperature_2m,weathercode") // adiciona dados horários reais
-                parameters.append("forecast_days", "7") // Adicionado para garantir 7 dias de previsão
+                parameters.append("forecast_days", "7")
                 parameters.append("timezone", "America/Sao_Paulo")
             }
         }
@@ -47,7 +53,6 @@ class WeatherRepository {
                 parameters.append("lon", lon.toString())
                 parameters.append("format", "json")
             }
-            // É importante definir um User-Agent válido para a API do Nominatim
             header("User-Agent", "AppDeMeteorologia/1.0 (seuemail@dominio.com)")
         }
         val jsonString = response.bodyAsText()
@@ -67,12 +72,24 @@ class WeatherRepository {
                 parameters.append("q", query)
                 parameters.append("format", "json")
             }
-            // Nominatim exige um User-Agent
             header("User-Agent", "AppDeMeteorologia/1.0 (seuemail@dominio.com)")
         }
         val jsonString = response.bodyAsText()
-        // A resposta é uma lista de resultados, pegamos o primeiro, se houver
         val results = Gson().fromJson(jsonString, Array<LocationResult>::class.java)
         return results.firstOrNull()
+    }
+
+    // *** Métodos para acesso ao banco via Room ***
+
+    suspend fun insertLocation(location: LocationEntity): Long {
+        return WeatherDatabase.getDatabase(context).locationDao().insertLocation(location)
+    }
+
+    fun getAllLocations(): Flow<List<LocationEntity>> {
+        return WeatherDatabase.getDatabase(context).locationDao().getAllLocations()
+    }
+
+    suspend fun deleteLocation(locationId: Long) {
+        WeatherDatabase.getDatabase(context).locationDao().deleteLocation(locationId)
     }
 }

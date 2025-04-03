@@ -2,8 +2,6 @@ package com.ufu.trabalho.database
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import androidx.room.TypeConverters
-import com.ufu.trabalho.database.converters.WeatherTypeConverters
 
 @Entity(tableName = "weather")
 data class WeatherEntity(
@@ -35,10 +33,14 @@ data class DailyForecastEntity(
 data class HourlyForecastEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val weatherId: Long, // Foreign key to WeatherEntity
+    val weatherId: Long, // foreign key para WeatherEntity
     val time: String,
     val temperature: Double,
-    val weatherCode: Int
+    val weatherCode: Int,
+    val relativeHumidity: Int,
+    val windSpeed: Double,
+    val precipitationProbability: Int,
+    val uvIndex: Double
 )
 
 @Entity(tableName = "location")

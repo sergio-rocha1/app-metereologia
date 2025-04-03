@@ -16,7 +16,7 @@ import com.ufu.trabalho.database.dao.WeatherDao
         HourlyForecastEntity::class,
         LocationEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(WeatherTypeConverters::class)

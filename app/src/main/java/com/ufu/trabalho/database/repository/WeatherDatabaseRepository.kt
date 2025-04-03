@@ -57,7 +57,11 @@ class WeatherDatabaseRepository(private val database: WeatherDatabase) {
                         weatherId = weatherId,
                         time = time,
                         temperature = hourly.temperature[index],
-                        weatherCode = hourly.weathercode[index]
+                        weatherCode = hourly.weathercode[index],
+                        relativeHumidity = hourly.relativeHumidity[index],
+                        windSpeed = hourly.windSpeed[index],
+                        precipitationProbability = hourly.precipitationProbability[index],
+                        uvIndex = hourly.uvIndex[index]
                     )
                 }
                 database.weatherDao().insertHourlyForecasts(hourlyForecasts)
@@ -137,10 +141,6 @@ class WeatherDatabaseRepository(private val database: WeatherDatabase) {
         return database.locationDao().getAllLocations()
     }
 
-    fun getFavoriteLocations(): Flow<List<LocationEntity>> {
-        return database.locationDao().getFavoriteLocations()
-    }
-
     suspend fun searchLocations(query: String): List<LocationResult> {
         return withContext(Dispatchers.IO) {
             database.locationDao().searchLocations(query).map {
@@ -150,24 +150,6 @@ class WeatherDatabaseRepository(private val database: WeatherDatabase) {
                     lon = it.longitude
                 )
             }
-        }
-    }
-
-    suspend fun updateFavoriteStatus(locationId: Long, isFavorite: Boolean) {
-        withContext(Dispatchers.IO) {
-            database.locationDao().updateFavoriteStatus(locationId, isFavorite)
-        }
-    }
-
-    suspend fun updateLastAccessed(locationId: Long) {
-        withContext(Dispatchers.IO) {
-            database.locationDao().updateLastAccessed(locationId, System.currentTimeMillis())
-        }
-    }
-
-    suspend fun deleteLocation(locationId: Long) {
-        withContext(Dispatchers.IO) {
-            database.locationDao().deleteLocation(locationId)
         }
     }
 
@@ -199,17 +181,38 @@ class WeatherDatabaseRepository(private val database: WeatherDatabase) {
         val times = mutableListOf<String>()
         val temps = mutableListOf<Double>()
         val weatherCodes = mutableListOf<Int>()
+        val humidities = mutableListOf<Int>()
+        val windSpeeds = mutableListOf<Double>()
+        val precipitationProbabilities = mutableListOf<Int>()
+        val uvIndices = mutableListOf<Double>()
 
-        entities.forEach { entity ->
+        entities.forEachIndexed { index, entity ->
             times.add(entity.time)
             temps.add(entity.temperature)
             weatherCodes.add(entity.weatherCode)
+            if (index == 0) {
+                // Para a hora atual, utilize os valores reais
+                humidities.add(entity.relativeHumidity)
+                windSpeeds.add(entity.windSpeed)
+                precipitationProbabilities.add(entity.precipitationProbability)
+                uvIndices.add(entity.uvIndex)
+            } else {
+                // Para as demais horas, atribua valores padrão (ou os que você desejar)
+                humidities.add(0)
+                windSpeeds.add(0.0)
+                precipitationProbabilities.add(0)
+                uvIndices.add(0.0)
+            }
         }
 
         return HourlyForecast(
             time = times,
             temperature = temps,
-            weathercode = weatherCodes
+            weathercode = weatherCodes.toList(),
+            relativeHumidity = humidities.toList(),
+            windSpeed = windSpeeds.toList(),
+            precipitationProbability = precipitationProbabilities.toList(),
+            uvIndex = uvIndices.toList()
         )
     }
 }
